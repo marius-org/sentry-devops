@@ -1,0 +1,5 @@
+# Log rotation cron job
+# Runs every day at 2:00 AM
+# Retains logs for last 5 days, archives and compresses older logs
+
+0 2 * * * root /bin/bash /scripts/log_rotation.sh >> /var/log/log_rotation.log 2>&1

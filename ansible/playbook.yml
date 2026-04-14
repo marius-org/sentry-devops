@@ -1,0 +1,94 @@
+---
+- name: Install and configure Self-Hosted Sentry
+  hosts: all
+  become: true
+  gather_facts: true
+
+  vars:
+    sentry_version: "24.11.0"
+    sentry_dir: "/opt/sentry"
+
+  tasks:
+
+    - name: Update apt packages
+      apt:
+        update_cache: yes
+        upgrade: yes
+
+    - name: Install required dependencies
+      apt:
+        name:
+          - git
+          - curl
+          - wget
+          - python3
+          - python3-pip
+          - ca-certificates
+          - gnupg
+          - lsb-release
+          - apt-transport-https
+        state: present
+
+    - name: Add Docker GPG key
+      apt_key:
+        url: https://download.docker.com/linux/ubuntu/gpg
+        state: present
+
+    - name: Add Docker repository
+      apt_repository:
+        repo: "deb [arch=amd64] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable"
+        state: present
+
+    - name: Install Docker
+      apt:
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+          - docker-compose-plugin
+        state: present
+        update_cache: yes
+
+    - name: Start and enable Docker service
+      systemd:
+        name: docker
+        state: started
+        enabled: yes
+
+    - name: Add ubuntu user to docker group
+      user:
+        name: ubuntu
+        groups: docker
+        append: yes
+
+    - name: Clone Sentry self-hosted repository
+      git:
+        repo: "https://github.com/getsentry/self-hosted.git"
+        dest: "{{ sentry_dir }}"
+        version: "{{ sentry_version }}"
+        force: yes
+
+    - name: Run Sentry install script
+      command: ./install.sh --no-user-prompt
+      args:
+        chdir: "{{ sentry_dir }}"
+      environment:
+        SENTRY_EVENT_RETENTION_DAYS: "90"
+      async: 1800
+      poll: 30
+
+    - name: Start Sentry services
+      command: docker compose up -d
+      args:
+        chdir: "{{ sentry_dir }}"
+
+    - name: Wait for Sentry to be ready
+      wait_for:
+        host: localhost
+        port: 9000
+        delay: 30
+        timeout: 300
+
+    - name: Print Sentry URL
+      debug:
+        msg: "Sentry is running at http://{{ ansible_host }}:9000"
