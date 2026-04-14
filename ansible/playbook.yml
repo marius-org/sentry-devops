@@ -68,14 +68,33 @@
         version: "{{ sentry_version }}"
         force: yes
 
+    - name: Check if Sentry is already installed
+      stat:
+        path: "{{ sentry_dir }}/.installed"
+      register: sentry_installed
+
     - name: Run Sentry install script
-      command: ./install.sh --no-user-prompt
+      command: ./install.sh --skip-user-creation
       args:
         chdir: "{{ sentry_dir }}"
       environment:
         SENTRY_EVENT_RETENTION_DAYS: "90"
+        REPORT_SELF_HOSTED_ISSUES: "0"
       async: 1800
       poll: 30
+      when: not sentry_installed.stat.exists
+
+    - name: Mark Sentry as installed
+      file:
+        path: "{{ sentry_dir }}/.installed"
+        state: touch
+      when: not sentry_installed.stat.exists
+
+    - name: Configure Sentry trusted origins
+      lineinfile:
+        path: "{{ sentry_dir }}/sentry/sentry.conf.py"
+        line: "CSRF_TRUSTED_ORIGINS=['http://{{ ansible_host }}:9000']"
+        create: yes
 
     - name: Start Sentry services
       command: docker compose up -d
